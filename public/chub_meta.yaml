@@ -1,77 +1,99 @@
-# All of these fields are optional, as is this file itself,
-#   in which case these values can be managed in the UI.
+project_name: "Medieval Isekai World Engine"
+tagline: "Deterministic open-world simulation layer for the Medieval Isekai setting."
+visibility: "UNLISTED"
+position: "ADJACENT"
+tags:
+  - "Stage"
+  - "Fantasy"
+  - "Dark Fantasy"
+  - "Isekai"
+  - "Open World"
+  - "Simulation"
 
-# The name of the stage.
-# project_name: "Stage Template"
-
-# A short tagline to show in search.
-# tagline: "A base template for all stages."
-
-# 'PUBLIC', 'PRIVATE', or 'UNLISTED'.
-# visibility: 'PUBLIC'
-
-# 'ADJACENT' | 'NONE' | 'COVER' | 'FULLSCREEN'
-# 'ADJACENT' is default. The frame will display on the side of the
-#   chat on desktop and above/in the top half of the chat on mobile.
-# 'NONE' will not display, only run.
-# 'COVER' will, indeed, cover the chat history completely,
-#   but leave the text input box.
-# 'FULLSCREEN' will make nothing below the header bar
-#   show except for your stage.
-# position: 'ADJACENT'
-
-# Self-explanatory.
-# tags:
-#  - 'Stage'
-#  - 'Admin'
-#  - 'Template'
-#  - 'Base'
-
-# The schema of any user-supplied config.
-# If your stage requires a configuration but has no
-#   defined schema, it won't work.
 config_schema:
   type: object
   properties:
-    health:
-      type: integer
-      default: 100
+    worldSeed:
+      type: string
+      default: "medieval-isekai-v1"
+    startRegionId:
+      type: string
+      enum:
+        - "lumeria-heartlands"
+        - "gursa-leymarsh"
+        - "marusa-western-reach"
+        - "orisc-seaboard"
+        - "great-central-footholds"
+      default: "lumeria-heartlands"
+    startRole:
+      type: string
+      enum:
+        - "reborn-wanderer"
+        - "academy-hopeful"
+        - "caravan-hand"
+        - "castaway"
+        - "minor-noble-exile"
+      default: "reborn-wanderer"
+    survivalMode:
+      type: string
+      enum:
+        - "off"
+        - "light"
+        - "moderate"
+      default: "light"
+    injuryRealism:
+      type: string
+      enum:
+        - "low"
+        - "medium"
+        - "high"
+      default: "medium"
+    weatherPersistence:
+      type: string
+      enum:
+        - "low"
+        - "medium"
+        - "high"
+      default: "medium"
+    economyComplexity:
+      type: string
+      enum:
+        - "simple"
+        - "moderate"
+      default: "simple"
+    showMapPanel:
+      type: boolean
+      default: true
 
-# The schema of the state that you store.
-# This isn't needed even if you do store state,
-#   and is here more for future use cases to
-#   optimize storage.
 state_schema:
   init:
     type: object
     properties:
-      grid:
+      worldSeed:
+        type: string
+      rulesetVersion:
         type: string
   message:
     type: object
     properties:
-      angry:
-        type: boolean
-        default: true
+      clock:
+        type: object
+      player:
+        type: object
+      world:
+        type: object
+      scene:
+        type: object
+      ui:
+        type: object
   chat:
     type: object
     properties:
-      visited:
+      exploredLocations:
         type: array
-        items:
-          type: integer
-
-# Whether to publish as 'Anonymous' instead of under your username.
-# is_anonymous: false
-
-# Self-explanatory.
-# ratings_disabled: false
-
-# This is here for future cases where ex. you need user secrets,
-#    but currently does nothing.
-# permissions:
-
-# extension_id is automatically generated on push with a new project;
-#    you should not make or set this value.
-# github_path will be added if it does not exist. It is the URL of the repo.
-
+      discoveredLoreEntries:
+        type: array
+      tutorialFlags:
+        type: array
+      unlockedSystems:
+        type: array

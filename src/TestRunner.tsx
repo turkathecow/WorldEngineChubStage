@@ -1,102 +1,148 @@
-import {Stage} from "./Stage";
-import {useEffect, useState} from "react";
-import {DEFAULT_INITIAL, StageBase, InitialData} from "@chub-ai/stages-ts";
+import { FormEvent, useEffect, useState } from "react";
+import { DEFAULT_INITIAL, DEFAULT_MESSAGE, InitialData, StageBase } from "@chub-ai/stages-ts";
+import InitData from "./assets/test-init.json";
+import { StageChatState, StageConfig, StageInitState, StageMessageState } from "./engine/types";
 
-// Modify this JSON to include whatever character/user information you want to test.
-import InitData from './assets/test-init.json';
-
-export interface TestStageRunnerProps<StageType extends StageBase<InitStateType, ChatStateType, MessageStateType, ConfigType>, InitStateType, ChatStateType, MessageStateType, ConfigType> {
-    factory: (data: InitialData<InitStateType, ChatStateType, MessageStateType, ConfigType>) => StageType;
+interface TestLogEntry {
+  kind: "user" | "system";
+  content: string;
 }
 
-/***
- This is a testing class for running a stage locally when testing,
-    outside the context of an active chat. See runTests() below for the main idea.
- ***/
-export const TestStageRunner = <StageType extends StageBase<InitStateType, ChatStateType, MessageStateType, ConfigType>,
-    InitStateType, ChatStateType, MessageStateType, ConfigType>({ factory }: TestStageRunnerProps<StageType, InitStateType, ChatStateType, MessageStateType, ConfigType>) => {
+export interface TestStageRunnerProps {
+  factory: (
+    data: InitialData<StageInitState, StageChatState, StageMessageState, StageConfig>,
+  ) => StageBase<StageInitState, StageChatState, StageMessageState, StageConfig>;
+}
 
-    // You may need to add a @ts-ignore here,
-    //     as the linter doesn't always like the idea of reading types arbitrarily from files
-    // @ts-ignore
-    const [stage, _setStage] = useState(new Stage({...DEFAULT_INITIAL, ...InitData}));
+export function TestStageRunner({ factory }: TestStageRunnerProps) {
+  const [stage] = useState(() =>
+    factory({
+      ...DEFAULT_INITIAL,
+      ...(InitData as Partial<InitialData<StageInitState, StageChatState, StageMessageState, StageConfig>>),
+    } as InitialData<StageInitState, StageChatState, StageMessageState, StageConfig>),
+  );
+  const [revision, setRevision] = useState(0);
+  const [input, setInput] = useState("wait for an hour");
+  const [responseInput, setResponseInput] = useState(
+    [
+      "The inn yard smells of wet straw and lamp oil as a ledger-keeper peers over the caravan manifests.",
+      "[STAGE_STATE]",
+      '{"new_npcs":[{"name":"Mira Vale","role":"Inn factor","locationHint":"Niria Village"}],"rumors_or_tensions":["Teamsters whisper about late caravans."],"new_scene_objects":[{"name":"Rain-darkened cargo ledger","locationHint":"Niria Village","portable":true}]}',
+      "[/STAGE_STATE]",
+    ].join("\n"),
+  );
+  const [promptBridge, setPromptBridge] = useState<string | null>(null);
+  const [parsedResponse, setParsedResponse] = useState<string | null>(null);
+  const [softFactsSnapshot, setSoftFactsSnapshot] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [log, setLog] = useState<TestLogEntry[]>([]);
 
-    // This is what forces the stage node to re-render.
-    const [node, setNode] = useState(new Date());
+  function refresh() {
+    setRevision((value) => value + 1);
+  }
 
-    function refresh() {
-        setNode(new Date());
+  async function initialize() {
+    const response = await stage.load();
+    setError(response.error ?? null);
+    refresh();
+  }
+
+  useEffect(() => {
+    initialize().catch((caught: unknown) => {
+      setError(caught instanceof Error ? caught.message : "Unknown initialization failure.");
+    });
+  }, []);
+
+  async function submitMessage(content: string) {
+    const response = await stage.beforePrompt({
+      ...DEFAULT_MESSAGE,
+      anonymizedId: "0",
+      content,
+      identity: `test-${Date.now()}`,
+      isBot: false,
+      isMain: true,
+      promptForId: null,
+    });
+
+    if (response.messageState) {
+      await stage.setState(response.messageState);
     }
 
-    async function delayedTest(test: any, delaySeconds: number) {
-        await new Promise(f => setTimeout(f, delaySeconds * 1000));
-        return test();
+    setPromptBridge(response.stageDirections ?? null);
+    setError(response.error ?? null);
+    setLog((previous) => [
+      ...previous,
+      { kind: "user", content },
+      ...(response.systemMessage ? [{ kind: "system" as const, content: response.systemMessage }] : []),
+    ]);
+    refresh();
+  }
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await submitMessage(input);
+  }
+
+  async function submitBotResponse(content: string) {
+    const response = await stage.afterResponse({
+      ...DEFAULT_MESSAGE,
+      anonymizedId: "bot-0",
+      content,
+      identity: `bot-${Date.now()}`,
+      isBot: true,
+      isMain: true,
+      promptForId: null,
+    });
+
+    if (response.messageState) {
+      await stage.setState(response.messageState);
+      setSoftFactsSnapshot(JSON.stringify(response.messageState.softFacts, null, 2));
     }
 
-    /***
-     This is the main thing you'll want to modify.
-     ***/
-    async function runTests() {
-        /*
-        await stage.setState({someKey: 'A new value, even!'});
-        refresh();
+    setParsedResponse(response.modifiedMessage ?? content);
+    setError(response.error ?? null);
+    setLog((previous) => [...previous, { kind: "system", content: `parsed response: ${response.modifiedMessage ?? content}` }]);
+    refresh();
+  }
 
-        const beforePromptResponse: Partial<StageResponse<ChatStateType, MessageStateType>> = await stage.beforePrompt({
-            ...DEFAULT_MESSAGE, ...{
-                anonymizedId: "0",
-                content: "Hello, this is what happens when a human sends a message, but before it's sent to the model.",
-                isBot: false
-            }
-        });
-        console.assert(beforePromptResponse.error == null);
-        refresh();
-        */
-        /***
-         "What is all of this nonsense with 'DEFAULT_MESSAGE'?" you may well ask.
-         The purpose of this is to future-proof your test runner.
-         The stage interface is designed to be forwards-compatible,
-            so that a stage with a certain library version will continue to work
-            even if new fields are added to any of the call/response objects.
-         But when new fields are added to the input objects, the code calling an
-            stage needs to be updated. Using DEFAULT_MESSAGE,
-            DEFAULT_INITIAL, DEFAULT_CHARACTER, DEFAULT_USER,
-            DEFAULT_LOAD_RESPONSE, and DEFAULT_RESPONSE
-            where relevant in your tests prevents a version bump
-            from breaking your test runner in many cases.
-         ***/
-        /*
-        const afterPromptResponse: Partial<StageResponse<ChatStateType, MessageStateType>> = await stage.afterResponse({
-            ...DEFAULT_MESSAGE, ...{
-            promptForId: null,
-            anonymizedId: "2",
-            content: "Why yes hello, and this is what happens when a bot sends a response.",
-            isBot: true}});
-        console.assert(afterPromptResponse.error == null);
-        refresh();
-
-        const afterDelayedThing: Partial<StageResponse<ChatStateType, MessageStateType>> = await delayedTest(() => stage.beforePrompt({
-            ...DEFAULT_MESSAGE, ...{
-            anonymizedId: "0", content: "Hello, and now the human is prompting again.", isBot: false, promptForId: null
-        }}), 5);
-        console.assert(afterDelayedThing.error == null);
-        refresh();
-        */
-    }
-
-    useEffect(() => {
-        // Always do this first, and put any other calls inside the load response.
-        stage.load().then((res) => {
-            console.info(`Test StageBase Runner load success result was ${res.success}`);
-            if(!res.success || res.error != null) {
-                console.error(`Error from stage during load, error: ${res.error}`);
-            } else {
-                runTests().then(() => console.info("Done running tests."));
-            }
-        });
-    }, []);
-
-    return <>
-        <div style={{display: 'none'}}>{String(node)}{window.location.href}</div>
-        {stage == null ? <div>Stage loading...</div> : stage.render()}
-    </>;
+  return (
+    <div className="dev-runner" data-revision={revision}>
+      <aside className="dev-console">
+        <h1>Local Runner</h1>
+        <p className="muted">This runner can exercise both `beforePrompt` and `afterResponse` locally.</p>
+        <form onSubmit={onSubmit}>
+          <textarea value={input} onChange={(event) => setInput(event.target.value)} rows={5} />
+          <div className="button-row">
+            <button type="submit">Run Turn</button>
+            <button type="button" onClick={() => submitMessage("travel to Gursa")}>Travel Test</button>
+            <button type="button" onClick={() => submitMessage("buy 2 trail rations")}>Shop Test</button>
+            <button type="button" onClick={() => submitMessage("check inventory")}>Inspect Test</button>
+          </div>
+        </form>
+        {error ? <div className="error-box">{error}</div> : null}
+        <section className="panel-card">
+          <p className="eyebrow">Prompt Bridge</p>
+          <pre>{promptBridge ?? "No turn run yet."}</pre>
+        </section>
+        <section className="panel-card">
+          <p className="eyebrow">Response Parser</p>
+          <textarea value={responseInput} onChange={(event) => setResponseInput(event.target.value)} rows={8} />
+          <div className="button-row">
+            <button type="button" onClick={() => submitBotResponse(responseInput)}>Parse Bot Response</button>
+          </div>
+          <p className="muted">Runs the sample reply through `afterResponse`, strips the machine block, and stores validated soft facts.</p>
+          <pre>{parsedResponse ?? "No bot response parsed yet."}</pre>
+        </section>
+        <section className="panel-card">
+          <p className="eyebrow">Soft Facts</p>
+          <pre>{softFactsSnapshot ?? "No extracted soft facts yet."}</pre>
+        </section>
+        <section className="panel-card">
+          <p className="eyebrow">Runner Log</p>
+          {log.length > 0 ? log.map((entry, index) => <p key={`${entry.kind}-${index}`}>{entry.kind}: {entry.content}</p>) : <p className="muted">No local turns yet.</p>}
+        </section>
+      </aside>
+      <div className="dev-stage">{stage.render()}</div>
+    </div>
+  );
 }

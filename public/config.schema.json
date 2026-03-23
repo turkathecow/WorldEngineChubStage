@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Medieval Isekai World Engine Config",
+  "type": "object",
+  "properties": {
+    "worldSeed": {
+      "type": "string",
+      "title": "World Seed",
+      "default": "medieval-isekai-v1"
+    },
+    "startRegionId": {
+      "type": "string",
+      "title": "Start Region",
+      "enum": [
+        "lumeria-heartlands",
+        "gursa-leymarsh",
+        "marusa-western-reach",
+        "orisc-seaboard",
+        "great-central-footholds"
+      ],
+      "default": "lumeria-heartlands"
+    },
+    "startRole": {
+      "type": "string",
+      "title": "Start Role / Background",
+      "enum": [
+        "reborn-wanderer",
+        "academy-hopeful",
+        "caravan-hand",
+        "castaway",
+        "minor-noble-exile"
+      ],
+      "default": "reborn-wanderer"
+    },
+    "survivalMode": {
+      "type": "string",
+      "title": "Survival Mode",
+      "enum": ["off", "light", "moderate"],
+      "default": "light"
+    },
+    "injuryRealism": {
+      "type": "string",
+      "title": "Injury Realism",
+      "enum": ["low", "medium", "high"],
+      "default": "medium"
+    },
+    "weatherPersistence": {
+      "type": "string",
+      "title": "Weather Persistence",
+      "enum": ["low", "medium", "high"],
+      "default": "medium"
+    },
+    "economyComplexity": {
+      "type": "string",
+      "title": "Economy Complexity",
+      "enum": ["simple", "moderate"],
+      "default": "simple"
+    },
+    "showMapPanel": {
+      "type": "boolean",
+      "title": "Show Map Panel",
+      "default": true
+    }
+  },
+  "additionalProperties": false
+}
