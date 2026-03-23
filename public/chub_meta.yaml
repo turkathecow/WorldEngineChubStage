@@ -84,6 +84,8 @@ state_schema:
         type: object
       scene:
         type: object
+      softFacts:
+        type: object
       ui:
         type: object
   chat:

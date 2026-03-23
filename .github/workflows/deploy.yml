@@ -42,7 +42,7 @@ jobs:
           if grep -q "^github_path:" public/chub_meta.yaml; then
             echo "Repo path already in metadata file."
           else
-            if ["${{ github.repository }}" == "CharHubAI/stage-template"]; then
+            if [ "${{ github.repository }}" = "CharHubAI/stage-template" ]; then
               echo "Not saving repo name for template project"
             else
               echo "Writing github path 'https://github.com/${{ github.repository }}' to metadata file."
@@ -58,7 +58,7 @@ jobs:
              echo "Secret STAGE_ID does not exist; attempting to read from file"
              STAGE_ID=$(grep '^extension_id:' public/chub_meta.yaml | cut -d ':' -f2 | tr -d " '\"")
              if [ "${STAGE_ID}" == ""  ]; then
-                if ["${{ github.repository }}" == "CharHubAI/stage-template"]; then
+                if [ "${{ github.repository }}" = "CharHubAI/stage-template" ]; then
                   echo "Not making ext id for template project"
                   STAGE_ID="extension-template-5523da8cf7de"
                 else
@@ -89,7 +89,16 @@ jobs:
         if: ${{ !contains(github.repository, 'template') }}
         run: |
           sudo apt-get install uuid-runtime
-          for file in public/characters/*.yaml; do
+          if [ ! -d public/characters ]; then
+            echo "No public/characters directory present. Skipping character UUID generation."
+            exit 0
+          fi
+          set -- public/characters/*.yaml
+          if [ "$1" = "public/characters/*.yaml" ]; then
+            echo "No character YAML files found. Skipping character UUID generation."
+            exit 0
+          fi
+          for file in "$@"; do
             if grep -q 'project_uuid:' "$file"; then
               echo "project has uuid."
             else
