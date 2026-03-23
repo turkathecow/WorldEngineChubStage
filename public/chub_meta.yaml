@@ -97,3 +97,6 @@ state_schema:
         type: array
       unlockedSystems:
         type: array
+
+github_path: 'https://github.com/turkathecow/WorldEngineChubStage'
+
