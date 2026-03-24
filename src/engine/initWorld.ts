@@ -6,32 +6,18 @@ import {
   EMPTY_MESSAGE_STATE,
 } from "./defaults";
 import { buildClockState } from "./clock";
-import { copperToWallet } from "./economy";
-import { addInventoryItem } from "./inventory";
 import { buildInitialEvents, buildLocalRumors } from "./events";
 import { markExploration, synchronizeAll } from "./reducers";
+import { maybeMarkExplorationForSpawn, createUnresolvedPlayerState, isSpawnedState, buildIncarnationNote } from "./spawnResolution";
 import { recalculateRouteConditions } from "./travel";
 import { buildInitialWeather } from "./weather";
-import { QuestState, StageChatState, StageConfig, StageInitState, StageMessageState } from "./types";
+import { StageChatState, StageConfig, StageInitState, StageMessageState } from "./types";
 
 export function normalizeConfig(config: StageConfig | null): StageConfig {
   return {
     ...DEFAULT_CONFIG,
     ...(config ?? {}),
   };
-}
-
-function buildInitialQuests(initState: StageInitState, questIds: string[]): QuestState[] {
-  return questIds
-    .map((questId) => initState.questCatalog.find((candidate) => candidate.id === questId))
-    .filter((quest): quest is NonNullable<typeof quest> => quest !== undefined)
-    .map((quest) => ({
-      id: quest.id,
-      title: quest.title,
-      status: "active",
-      summary: quest.summary,
-      obligationLevel: quest.obligationLevel,
-    }));
 }
 
 export function createInitState(config: StageConfig): StageInitState {
@@ -42,50 +28,8 @@ export function createChatState(existing: StageChatState | null): StageChatState
   return existing ?? { ...DEFAULT_CHAT_STATE };
 }
 
-export function createInitialMessageState(initState: StageInitState): StageMessageState {
-  const roleStart =
-    initState.roleStarts.find((candidate) => candidate.id === initState.config.startRole) ?? initState.roleStarts[0];
-  const startLocation = initState.mapDef.locations.find((location) => location.id === roleStart.startLocationId);
-  if (!startLocation) {
-    throw new Error(`Unknown start location: ${roleStart.startLocationId}`);
-  }
-
-  const initialState = EMPTY_MESSAGE_STATE();
-  initialState.clock = buildClockState(
-    DEFAULT_START_CLOCK.year,
-    DEFAULT_START_CLOCK.month,
-    DEFAULT_START_CLOCK.day,
-    DEFAULT_START_CLOCK.hour,
-    DEFAULT_START_CLOCK.minute,
-    initState.worldDef.calendarDef,
-  );
-  initialState.player = {
-    ...initialState.player,
-    roleBackground: roleStart.id,
-    locationId: startLocation.id,
-    regionId: startLocation.regionId,
-    money: copperToWallet(roleStart.startingMoneyInCopper, initState),
-    activeQuests: buildInitialQuests(initState, roleStart.startingQuestIds),
-    reputation: {
-      "aihalid-guild": roleStart.id === "caravan-hand" ? 10 : 0,
-      "eter-royal-magic-academy": roleStart.id === "academy-hopeful" ? 8 : 0,
-      "gursa-treaty-council": roleStart.id === "minor-noble-exile" ? -5 : 0,
-      "brotherhood-golden-sun": -10,
-      "ardanthal-crown": roleStart.id === "minor-noble-exile" ? 5 : 0,
-    },
-  };
-
-  let inventory = initialState.player.inventory;
-  for (const entry of roleStart.starterItemIds) {
-    inventory = addInventoryItem(inventory, entry.itemId, entry.quantity, initState.itemCatalog);
-  }
-  initialState.player.inventory = inventory;
-
-  initialState.world.weatherByRegion = buildInitialWeather(initState, initialState.clock);
-  initialState.world.routeConditions = recalculateRouteConditions(initState, initialState);
-  initialState.world.dynamicEvents = buildInitialEvents(initState, initialState.clock.totalMinutes);
-  initialState.world.localRumors = buildLocalRumors(initState, initialState);
-  initialState.world.settlementStates = Object.fromEntries(
+function buildSettlementStates(initState: StageInitState): StageMessageState["world"]["settlementStates"] {
+  return Object.fromEntries(
     initState.mapDef.locations.map((location) => [
       location.id,
       {
@@ -114,7 +58,10 @@ export function createInitialMessageState(initState: StageInitState): StageMessa
       },
     ]),
   );
-  initialState.world.localActors = Object.fromEntries(
+}
+
+function buildLocalActors(initState: StageInitState): StageMessageState["world"]["localActors"] {
+  return Object.fromEntries(
     initState.mapDef.locations.map((location) => [
       location.id,
       initState.staticActors
@@ -130,10 +77,102 @@ export function createInitialMessageState(initState: StageInitState): StageMessa
         })),
     ]),
   );
-  initialState.ui.mapFocusLocationId = startLocation.id;
-  initialState.ui.lastEngineNote = `Reincarnated as ${roleStart.label.toLowerCase()} near ${startLocation.name}.`;
+}
 
-  return synchronizeAll(initState, initialState);
+function populateGlobalWorld(initState: StageInitState, messageState: StageMessageState): StageMessageState {
+  const nextState = {
+    ...messageState,
+    world: {
+      ...messageState.world,
+    },
+  };
+
+  if (Object.keys(nextState.world.weatherByRegion).length === 0) {
+    nextState.world.weatherByRegion = buildInitialWeather(initState, nextState.clock);
+  }
+  if (Object.keys(nextState.world.routeConditions).length === 0) {
+    nextState.world.routeConditions = recalculateRouteConditions(initState, nextState);
+  }
+  if (nextState.world.dynamicEvents.length === 0) {
+    nextState.world.dynamicEvents = buildInitialEvents(initState, nextState.clock.totalMinutes);
+  }
+  if (Object.keys(nextState.world.localRumors).length === 0) {
+    nextState.world.localRumors = buildLocalRumors(initState, nextState);
+  }
+  if (Object.keys(nextState.world.settlementStates).length === 0) {
+    nextState.world.settlementStates = buildSettlementStates(initState);
+  }
+  if (Object.keys(nextState.world.localActors).length === 0) {
+    nextState.world.localActors = buildLocalActors(initState);
+  }
+
+  return nextState;
+}
+
+export function createInitialMessageState(initState: StageInitState): StageMessageState {
+  const initialState = EMPTY_MESSAGE_STATE();
+  initialState.clock = buildClockState(
+    DEFAULT_START_CLOCK.year,
+    DEFAULT_START_CLOCK.month,
+    DEFAULT_START_CLOCK.day,
+    DEFAULT_START_CLOCK.hour,
+    DEFAULT_START_CLOCK.minute,
+    initState.worldDef.calendarDef,
+  );
+  initialState.player = createUnresolvedPlayerState();
+  initialState.ui.mapFocusLocationId = null;
+  initialState.ui.lastEngineNote = buildIncarnationNote(initialState);
+  return synchronizeAll(initState, populateGlobalWorld(initState, initialState));
+}
+
+function hydrateExistingMessageState(initState: StageInitState, messageState: StageMessageState): StageMessageState {
+  const emptyState = EMPTY_MESSAGE_STATE();
+  const nextState: StageMessageState = {
+    ...emptyState,
+    ...messageState,
+    player: {
+      ...emptyState.player,
+      ...(messageState.player ?? {}),
+    },
+    world: {
+      ...emptyState.world,
+      ...(messageState.world ?? {}),
+    },
+    scene: {
+      ...emptyState.scene,
+      ...(messageState.scene ?? {}),
+    },
+    softFacts: {
+      ...emptyState.softFacts,
+      ...(messageState.softFacts ?? {}),
+    },
+    ui: {
+      ...emptyState.ui,
+      ...(messageState.ui ?? {}),
+    },
+  };
+
+  nextState.incarnationPhase =
+    messageState.incarnationPhase ??
+    (nextState.player.locationId && nextState.player.regionId ? "spawned" : "unresolved");
+  nextState.spawnCandidate = messageState.spawnCandidate ?? null;
+
+  if (nextState.incarnationPhase !== "spawned") {
+    nextState.player = createUnresolvedPlayerState();
+    nextState.scene = {
+      ...nextState.scene,
+      visibleActors: [],
+      visibleObjects: [],
+      immediateHazards: [],
+    };
+    nextState.ui.mapFocusLocationId = null;
+  }
+
+  if (!nextState.ui.lastEngineNote) {
+    nextState.ui.lastEngineNote = buildIncarnationNote(nextState);
+  }
+
+  return populateGlobalWorld(initState, nextState);
 }
 
 export function hydrateState(
@@ -141,8 +180,11 @@ export function hydrateState(
   messageState: StageMessageState | null,
   chatState: StageChatState | null,
 ): { messageState: StageMessageState; chatState: StageChatState } {
-  const nextMessageState = synchronizeAll(initState, messageState ?? createInitialMessageState(initState));
-  const nextChatState = markExploration(initState, nextMessageState, createChatState(chatState));
+  const hydratedMessageState = messageState ? hydrateExistingMessageState(initState, messageState) : createInitialMessageState(initState);
+  const nextMessageState = synchronizeAll(initState, hydratedMessageState);
+  const nextChatState = isSpawnedState(nextMessageState)
+    ? maybeMarkExplorationForSpawn(initState, nextMessageState, markExploration(initState, nextMessageState, createChatState(chatState)))
+    : createChatState(chatState);
   return {
     messageState: nextMessageState,
     chatState: nextChatState,

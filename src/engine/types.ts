@@ -48,6 +48,7 @@ export type QuestStatus = "active" | "paused" | "complete";
 export type ObligationLevel = "low" | "medium" | "high";
 export type ConditionSeverity = "minor" | "moderate" | "serious";
 export type FatigueBand = "fresh" | "worn" | "tired" | "spent";
+export type IncarnationPhase = "unresolved" | "resolving" | "spawned";
 export type StartRoleId =
   | "reborn-wanderer"
   | "academy-hopeful"
@@ -280,15 +281,27 @@ export interface PartyMemberState {
   condition: string;
 }
 
+export interface SpawnCandidate {
+  chosenRace?: string;
+  chosenGender?: string;
+  chosenAppearance?: string;
+  chosenFamily?: string;
+  chosenRole?: StartRoleId;
+  chosenLocationText?: string;
+  chosenRegionId?: string;
+  chosenLocationId?: string;
+  confidence?: number;
+}
+
 export interface PlayerState {
-  roleBackground: StartRoleId;
-  locationId: string;
-  regionId: string;
+  roleBackground: StartRoleId | null;
+  locationId: string | null;
+  regionId: string | null;
   sublocation: string | null;
-  money: MoneyWallet;
+  money: MoneyWallet | null;
   inventory: InventoryEntry[];
   injuries: InjuryState[];
-  fatigue: FatigueState;
+  fatigue: FatigueState | null;
   reputation: Record<string, number>;
   activeQuests: QuestState[];
   party: PartyMemberState[];
@@ -414,6 +427,8 @@ export interface UIState {
 }
 
 export interface StageMessageState {
+  incarnationPhase: IncarnationPhase;
+  spawnCandidate: SpawnCandidate | null;
   clock: ClockState;
   player: PlayerState;
   world: WorldState;
@@ -512,35 +527,56 @@ export interface DashboardViewModel {
       dangerLabel: string;
     }>;
     explored: boolean;
+    pending: boolean;
+    statusLabel: string;
+    note: string;
+    knownChoices: Array<{
+      label: string;
+      value: string;
+    }>;
   };
   weather: {
     conditionLabel: string;
     temperatureLabel: string;
     eventLabel: string | null;
     travelNote: string;
+    pending: boolean;
+    note: string;
   };
   status: {
     moneyLabel: string;
     fatigueLabel: string;
     injuries: string[];
     nearbyHazards: string[];
+    pending: boolean;
+    note: string;
   };
   inventory: {
     highlights: string[];
+    pending: boolean;
+    note: string;
   };
-  reputation: Array<{
-    factionName: string;
-    standingLabel: string;
-    score: number;
-  }>;
-  quests: Array<{
-    id: string;
-    title: string;
-    obligationLevel: ObligationLevel;
-    summary: string;
-  }>;
+  reputation: {
+    entries: Array<{
+      factionName: string;
+      standingLabel: string;
+      score: number;
+    }>;
+    pending: boolean;
+    note: string;
+  };
+  quests: {
+    entries: Array<{
+      id: string;
+      title: string;
+      obligationLevel: ObligationLevel;
+      summary: string;
+    }>;
+    pending: boolean;
+    note: string;
+  };
   map: {
-    currentLocationId: string;
+    currentLocationId: string | null;
     currentLocationName: string;
     adjacentLocations: Array<{
       id: string;
@@ -548,6 +584,8 @@ export interface DashboardViewModel {
       routeLabel: string;
       explored: boolean;
     }>;
+    pending: boolean;
+    note: string;
   };
   engineNote: string | null;
 }

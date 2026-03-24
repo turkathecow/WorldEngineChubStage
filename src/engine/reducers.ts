@@ -8,6 +8,7 @@ import {
   StageMessageState,
 } from "./types";
 import { buildDashboardViewModel, getLocation } from "./selectors";
+import { buildIncarnationNote, isSpawnedState } from "./spawnResolution";
 
 const MAX_KNOWN_NPCS = 40;
 const MAX_SCENE_OBJECTS = 50;
@@ -152,6 +153,18 @@ export function ensureSoftFactsState(messageState: StageMessageState): StageMess
 }
 
 export function synchronizeScene(initState: StageInitState, messageState: StageMessageState): StageMessageState {
+  if (!isSpawnedState(messageState) || !messageState.player.locationId) {
+    return {
+      ...messageState,
+      scene: {
+        ...messageState.scene,
+        visibleActors: [],
+        visibleObjects: [],
+        immediateHazards: [],
+      },
+    };
+  }
+
   const location = getLocation(initState, messageState.player.locationId);
   const nearbyActors = messageState.world.localActors[location.id] ?? [];
   const localWeather = messageState.world.weatherByRegion[location.regionId];
@@ -194,7 +207,9 @@ export function synchronizeUI(messageState: StageMessageState): StageMessageStat
     ...messageState,
     ui: {
       ...messageState.ui,
-      mapFocusLocationId: messageState.ui.mapFocusLocationId ?? messageState.player.locationId,
+      mapFocusLocationId:
+        messageState.ui.mapFocusLocationId ??
+        (isSpawnedState(messageState) ? messageState.player.locationId : null),
     },
   };
 }
@@ -204,6 +219,9 @@ export function synchronizeAll(initState: StageInitState, messageState: StageMes
 }
 
 export function markExploration(initState: StageInitState, messageState: StageMessageState, chatState: StageChatState): StageChatState {
+  if (!isSpawnedState(messageState) || !messageState.player.locationId) {
+    return chatState;
+  }
   const location = getLocation(initState, messageState.player.locationId);
   return {
     ...chatState,
@@ -213,6 +231,9 @@ export function markExploration(initState: StageInitState, messageState: StageMe
 }
 
 export function buildEngineNote(initState: StageInitState, messageState: StageMessageState, chatState: StageChatState): string {
+  if (!isSpawnedState(messageState)) {
+    return buildIncarnationNote(messageState);
+  }
   const dashboard = buildDashboardViewModel(initState, messageState, chatState);
   return `${dashboard.topLine.location} | ${dashboard.weather.conditionLabel} | ${dashboard.status.moneyLabel} | ${dashboard.status.fatigueLabel}`;
 }

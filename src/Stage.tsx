@@ -13,6 +13,12 @@ import { buildPromptBridge } from "./engine/promptBridge";
 import { resolveUserTurn } from "./engine/resolveAction";
 import { buildDashboardViewModel } from "./engine/selectors";
 import { mergeSoftFactsIntoMessageState, synchronizeAll } from "./engine/reducers";
+import {
+  applySpawnResolutionFromBotText,
+  applySpawnResolutionFromUserInput,
+  isSpawnedState,
+  maybeMarkExplorationForSpawn,
+} from "./engine/spawnResolution";
 import { StageChatState, StageConfig, StageInitState, StageMessageState } from "./engine/types";
 import { Dashboard } from "./ui/Dashboard";
 
@@ -54,9 +60,17 @@ export class Stage extends StageBase<StageInitState, StageChatState, StageMessag
   }
 
   async beforePrompt(userMessage: Message): Promise<Partial<StageResponse<StageChatState, StageMessageState>>> {
-    const resolution = resolveUserTurn(this.initState, this.messageState, this.chatState, userMessage.content);
-    this.messageState = resolution.messageState;
-    this.chatState = resolution.chatState;
+    if (!isSpawnedState(this.messageState)) {
+      this.messageState = synchronizeAll(
+        this.initState,
+        applySpawnResolutionFromUserInput(this.initState, this.messageState, userMessage.content),
+      );
+      this.chatState = maybeMarkExplorationForSpawn(this.initState, this.messageState, this.chatState);
+    } else {
+      const resolution = resolveUserTurn(this.initState, this.messageState, this.chatState, userMessage.content);
+      this.messageState = resolution.messageState;
+      this.chatState = resolution.chatState;
+    }
     this.lastPromptBridge = buildPromptBridge(this.initState, this.messageState, this.chatState);
 
     return {
@@ -93,6 +107,14 @@ export class Stage extends StageBase<StageInitState, StageChatState, StageMessag
           this.chatState = promoteSoftFactsToChatState(this.initState, this.chatState, normalized);
         }
       }
+    }
+
+    if (!isSpawnedState(this.messageState)) {
+      this.messageState = synchronizeAll(
+        this.initState,
+        applySpawnResolutionFromBotText(this.initState, this.messageState, modifiedMessage ?? botMessage.content),
+      );
+      this.chatState = maybeMarkExplorationForSpawn(this.initState, this.messageState, this.chatState);
     }
 
     if (issues.length > 0) {

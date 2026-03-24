@@ -6,11 +6,14 @@ interface AdjacentLocationEntry {
 }
 
 interface MapPanelProps {
+  currentLocationId: string | null;
   currentLocationName: string;
   adjacentLocations: AdjacentLocationEntry[];
+  pending: boolean;
+  note: string;
 }
 
-export function MapPanel({ currentLocationName, adjacentLocations }: MapPanelProps) {
+export function MapPanel({ currentLocationName, adjacentLocations, pending, note }: MapPanelProps) {
   return (
     <section className="panel-card">
       <p className="eyebrow">Routes</p>
@@ -25,7 +28,7 @@ export function MapPanel({ currentLocationName, adjacentLocations }: MapPanelPro
             </div>
           ))
         ) : (
-          <p className="muted">No adjacent routes mapped.</p>
+          <p className="muted">{pending ? note : "No adjacent routes mapped."}</p>
         )}
       </div>
     </section>

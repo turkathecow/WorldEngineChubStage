@@ -838,6 +838,8 @@ export const EMPTY_INIT_STATE = (config: StageConfig): StageInitState => ({
 });
 
 export const EMPTY_MESSAGE_STATE = (): StageMessageState => ({
+  incarnationPhase: "unresolved",
+  spawnCandidate: null,
   clock: {
     day: 1,
     month: 1,
@@ -848,22 +850,14 @@ export const EMPTY_MESSAGE_STATE = (): StageMessageState => ({
     totalMinutes: 0,
   },
   player: {
-    roleBackground: "reborn-wanderer",
-    locationId: "niria-village",
-    regionId: "lumeria-heartlands",
+    roleBackground: null,
+    locationId: null,
+    regionId: null,
     sublocation: null,
-    money: {
-      copper: 0,
-      silver: 0,
-      gold: 0,
-      diamond: 0,
-    },
+    money: null,
     inventory: [],
     injuries: [],
-    fatigue: {
-      value: 10,
-      band: "fresh",
-    },
+    fatigue: null,
     reputation: {},
     activeQuests: [],
     party: [],
@@ -891,7 +885,7 @@ export const EMPTY_MESSAGE_STATE = (): StageMessageState => ({
   },
   ui: {
     selectedPanel: "overview",
-    mapFocusLocationId: "niria-village",
-    lastEngineNote: "A new life begins.",
+    mapFocusLocationId: null,
+    lastEngineNote: "Incarnation not yet resolved.",
   },
 });

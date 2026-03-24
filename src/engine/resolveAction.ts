@@ -8,6 +8,7 @@ import { buildEngineNote, markExploration, synchronizeAll } from "./reducers";
 import { getLocation } from "./selectors";
 import { computeTravelMinutes, getAdjacentRoutes, getOtherRouteEnd, getRouteByLocations, recalculateRouteConditions } from "./travel";
 import { advanceWeather } from "./weather";
+import { buildIncarnationNote, isSpawnedState } from "./spawnResolution";
 import {
   ActionCategory,
   ActionIntent,
@@ -241,6 +242,9 @@ function resolveWait(initState: StageInitState, messageState: StageMessageState,
   const text = normalize(rawText);
   const minutes = text.includes("sleep") ? 480 : text.includes("rest") ? 180 : 60;
   let nextState = advanceWorldTime(initState, messageState, minutes);
+  if (!nextState.player.fatigue) {
+    return buildBlockedResolution(nextState, chatState, "wait", "Wait blocked", "Player condition has not been initialized.");
+  }
   nextState.player.fatigue = recoverFatigue(nextState.player.fatigue, minutes);
   nextState.player.injuries = recoverMinorInjuries(nextState.player.injuries, minutes);
   nextState.ui.lastEngineNote = `Time passes quietly for ${minutes} minutes.`;
@@ -270,8 +274,14 @@ function resolveTravel(
   if (!targetLocationId) {
     return buildBlockedResolution(messageState, chatState, "travel", "Travel failed", "No known destination was recognized.");
   }
+  if (!messageState.player.locationId || !messageState.player.fatigue || !messageState.player.money) {
+    return buildBlockedResolution(messageState, chatState, "travel", "Travel blocked", "Current spawn state is not fully grounded.");
+  }
+  const currentLocationId = messageState.player.locationId;
+  const currentFatigue = messageState.player.fatigue;
+  const currentMoney = messageState.player.money;
 
-  const route = getRouteByLocations(initState, messageState.player.locationId, targetLocationId);
+  const route = getRouteByLocations(initState, currentLocationId, targetLocationId);
   if (!route) {
     return buildBlockedResolution(
       messageState,
@@ -294,7 +304,7 @@ function resolveTravel(
   }
 
   const destination = getLocation(initState, targetLocationId);
-  const minutes = computeTravelMinutes(initState, route, routeCondition, messageState.player.fatigue.value);
+  const minutes = computeTravelMinutes(initState, route, routeCondition, currentFatigue.value);
   let nextState = advanceWorldTime(initState, messageState, minutes);
   const travelFatigue =
     Math.ceil((minutes / 60) * initState.worldDef.travelModelDef.fatiguePerTravelHour) +
@@ -304,10 +314,10 @@ function resolveTravel(
   nextState.player.locationId = destination.id;
   nextState.player.regionId = destination.regionId;
   nextState.player.sublocation = null;
-  nextState.player.fatigue = adjustFatigue(nextState.player.fatigue, travelFatigue);
+  nextState.player.fatigue = adjustFatigue(nextState.player.fatigue ?? currentFatigue, travelFatigue);
   nextState.player.injuries = maybeAddTravelStrain(
     nextState.player.injuries,
-    nextState.player.fatigue,
+    nextState.player.fatigue ?? currentFatigue,
     initState.config.injuryRealism,
   );
   nextState.ui.selectedPanel = "map";
@@ -321,7 +331,7 @@ function resolveTravel(
     details: [
       route.notes,
       `Route conditions: ${routeCondition.statusLabel}`,
-      `Travel cost: ${formatMoney(messageState.player.money)}`,
+      `Travel cost: ${formatMoney(currentMoney)}`,
     ],
     destinationLocationId: destination.id,
     touchedSystems: ["clock", "weather", "travel", "fatigue", "map"],
@@ -367,6 +377,9 @@ function resolveShop(
   quantity: number,
   shopAction: ShopAction | null,
 ): ActionResolution {
+  if (!messageState.player.locationId || !messageState.player.money) {
+    return buildBlockedResolution(messageState, chatState, "shop", "Trade blocked", "Player market state is not fully initialized.");
+  }
   const location = getLocation(initState, messageState.player.locationId);
   if (!location.market) {
     return buildBlockedResolution(messageState, chatState, "shop", "Trade blocked", "There is no reliable market here.");
@@ -379,12 +392,13 @@ function resolveShop(
   if (!item) {
     return buildBlockedResolution(messageState, chatState, "shop", "Trade blocked", "That item is not part of the current item catalog.");
   }
+  const currentMoney = messageState.player.money;
 
   let nextState = cloneMessageState(messageState);
   const totalCost = item.baseValueInCopper * quantity;
 
   if (shopAction === "buy") {
-    if (!canAfford(nextState.player.money, totalCost, initState)) {
+    if (!canAfford(nextState.player.money ?? currentMoney, totalCost, initState)) {
       return buildBlockedResolution(
         messageState,
         chatState,
@@ -393,7 +407,7 @@ function resolveShop(
         `You need ${totalCost} copper to buy ${quantity} ${item.name}.`,
       );
     }
-    const nextWallet = subtractMoney(nextState.player.money, totalCost, initState);
+    const nextWallet = subtractMoney(nextState.player.money ?? currentMoney, totalCost, initState);
     if (!nextWallet) {
       return buildBlockedResolution(messageState, chatState, "shop", "Purchase failed", "Money conversion failed.");
     }
@@ -414,7 +428,7 @@ function resolveShop(
       return buildBlockedResolution(messageState, chatState, "shop", "Sale failed", "Inventory update failed.");
     }
     nextState.player.inventory = nextInventory;
-    nextState.player.money = addMoney(nextState.player.money, Math.floor(totalCost * 0.5), initState);
+    nextState.player.money = addMoney(nextState.player.money ?? currentMoney, Math.floor(totalCost * 0.5), initState);
   }
 
   nextState = advanceWorldTime(initState, nextState, 15);
@@ -443,6 +457,9 @@ function resolveTalk(
   chatState: StageChatState,
   rawText: string,
 ): ActionResolution {
+  if (!messageState.player.locationId) {
+    return buildBlockedResolution(messageState, chatState, "talk", "Talk blocked", "There is no grounded current location yet.");
+  }
   const currentActors = messageState.world.localActors[messageState.player.locationId] ?? [];
   let nextState = advanceWorldTime(initState, messageState, 10);
   nextState = talkTargetEffect(nextState, currentActors, rawText);
@@ -516,6 +533,16 @@ export function resolveUserTurn(
   chatState: StageChatState,
   rawText: string,
 ): ActionResolution {
+  if (!isSpawnedState(messageState)) {
+    return buildBlockedResolution(
+      messageState,
+      chatState,
+      "fallback",
+      "Incarnation unresolved",
+      buildIncarnationNote(messageState),
+    );
+  }
+
   const intent = resolveActionIntent(initState, messageState, rawText);
   const currentState = synchronizeAll(initState, messageState);
 

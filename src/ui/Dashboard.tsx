@@ -29,13 +29,10 @@ export function Dashboard({ viewModel, showMapPanel }: DashboardProps) {
         <WeatherPanel {...viewModel.weather} />
         <StatusPanel {...viewModel.status} />
         <InventoryPanel {...viewModel.inventory} />
-        <ReputationPanel entries={viewModel.reputation} />
-        <QuestPanel quests={viewModel.quests} />
+        <ReputationPanel {...viewModel.reputation} />
+        <QuestPanel {...viewModel.quests} />
         {showMapPanel ? (
-          <MapPanel
-            currentLocationName={viewModel.map.currentLocationName}
-            adjacentLocations={viewModel.map.adjacentLocations}
-          />
+          <MapPanel {...viewModel.map} />
         ) : null}
       </section>
     </main>

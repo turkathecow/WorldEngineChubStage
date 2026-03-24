@@ -6,15 +6,17 @@ interface QuestEntry {
 }
 
 interface QuestPanelProps {
-  quests: QuestEntry[];
+  entries: QuestEntry[];
+  pending: boolean;
+  note: string;
 }
 
-export function QuestPanel({ quests }: QuestPanelProps) {
+export function QuestPanel({ entries, pending, note }: QuestPanelProps) {
   return (
     <section className="panel-card">
       <p className="eyebrow">Obligations</p>
-      {quests.length > 0 ? (
-        quests.map((quest) => (
+      {entries.length > 0 ? (
+        entries.map((quest) => (
           <div className="quest-card" key={quest.id}>
             <div className="panel-header">
               <strong>{quest.title}</strong>
@@ -24,7 +26,7 @@ export function QuestPanel({ quests }: QuestPanelProps) {
           </div>
         ))
       ) : (
-        <p className="muted">No active obligations.</p>
+        <p className="muted">{pending ? note : "No active obligations."}</p>
       )}
     </section>
   );

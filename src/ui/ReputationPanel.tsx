@@ -6,20 +6,26 @@ interface ReputationEntry {
 
 interface ReputationPanelProps {
   entries: ReputationEntry[];
+  pending: boolean;
+  note: string;
 }
 
-export function ReputationPanel({ entries }: ReputationPanelProps) {
+export function ReputationPanel({ entries, pending, note }: ReputationPanelProps) {
   return (
     <section className="panel-card">
       <p className="eyebrow">Reputation</p>
       <div className="list-block">
-        {entries.map((entry) => (
-          <div className="route-row" key={entry.factionName}>
-            <strong>{entry.factionName}</strong>
-            <span>{entry.standingLabel}</span>
-            <span>{entry.score}</span>
-          </div>
-        ))}
+        {entries.length > 0 ? (
+          entries.map((entry) => (
+            <div className="route-row" key={entry.factionName}>
+              <strong>{entry.factionName}</strong>
+              <span>{entry.standingLabel}</span>
+              <span>{entry.score}</span>
+            </div>
+          ))
+        ) : (
+          <p className="muted">{pending ? note : "No active faction standing."}</p>
+        )}
       </div>
     </section>
   );
